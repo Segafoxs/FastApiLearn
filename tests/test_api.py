@@ -24,7 +24,7 @@ class MockResponse:
 
 
 
-@pytest.fixture(name="session",scope="session", autouse=True)
+@pytest.fixture(name="session",scope="class", autouse=True)
 def session_fixture():
     engine = create_engine("postgresql://postgres:admin1@localhost/testDataBase")
     Base.metadata.drop_all(engine)
@@ -45,44 +45,91 @@ def client_fixture(session: Session):
     app.dependency_overrides.clear()
 
 
-def test_create_user(client: TestClient, monkeypatch):
+class TestCase():
+    def test_get_user(self, client: TestClient, monkeypatch):
+        monkeypatch.setattr("api.api.get_db_user_from_id", MockResponse.return_user)
 
-    monkeypatch.setattr("api.api.get_db_user", MockResponse.return_user)
-    # пользователь есть в базе
-    response = client.post(
-        "/register/", json={"username": "admin", "password": "admin", "email": "admin@mail.ru"}
-    )
+        response = client.get("/user/1")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == 1
+        assert data["username"] == "admin"
+
+    def test_create_user(self, client: TestClient, monkeypatch):
+
+        monkeypatch.setattr("api.api.get_db_user", MockResponse.return_user)
+        # пользователь есть в базе
+        response = client.post(
+            "/register/", json={"username": "admin", "password": "admin", "email": "admin@mail.ru"}
+        )
+
+        assert response.status_code == 409
+        assert response.json() == {"detail": "Email is busy"}
+
+        # валидация email
+        response = client.post(
+            "/register/", json={"username": "serg", "password": "serg", "email": "serg"}
+        )
+
+        assert response.status_code == 422
 
 
-    assert response.status_code == 409
-    assert response.json() == {"detail": "Email is busy"}
+        monkeypatch.setattr("api.api.get_db_user", MockResponse.none_user)
+        #валидные данные
+        response = client.post(
+            "/register/", json={"username": "admin", "password": "admin", "email": "admin@mail.ru"}
+        )
 
-    monkeypatch.setattr("api.api.get_db_user", MockResponse.none_user)
-    #валидные данные
-    response = client.post(
-        "/register/", json={"username": "admin", "password": "admin", "email": "admin@mail.ru"}
-    )
-
-    assert response.status_code == 201
-    assert response.json() == {"message": "User create successfully!"}
+        assert response.status_code == 201
+        assert response.json() == {"message": "User create successfully!"}
 
 
+    def test_auth(self, client: TestClient):
 
-    #валидация email
-    response = client.post(
-        "/register/", json={"username": "serg", "password": "serg", "email": "serg"}
-    )
+        data = {"username": "admin@mail.ru", "password": "admin"}
+        response = client.post("/login/", auth=(data["username"], data["password"]))
+        assert response.status_code == 200
+        assert response.json() == {"message": "You have access to the protected resource!",
+         "id": 1,
+         "username": "admin"}
 
-    assert response.status_code == 422
 
 
-def test_get_user(client: TestClient, monkeypatch):
+    def test_rename_user(self, client: TestClient, monkeypatch):
 
-    monkeypatch.setattr("api.api.get_db_user_from_id", MockResponse.return_user)
+        #Валидные данные
+        response = client.put("/update/1", json={"username": "serg"})
+        data = response.json()
+        assert response.status_code == 200
+        assert data["id"] == 1
+        assert data["username"] == "serg"
 
-    response = client.get("/user/1")
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["username"] == "admin"
+        #Пользователь не найден
+        response = client.put("/update/22", json={"username": "admin"})
+        assert response.status_code == 404
+        assert response.json() == {"detail": "User is not found"}
+
+
+        response = client.put("/update/1", json={"username": 224})
+        assert response.status_code == 422
+
+
+
+
+
+    def test_delete_user(self , client: TestClient, monkeypatch):
+
+        # пользователь не найден
+        response = client.delete("/delete_user/22")
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "User is not found"}
+
+
+        # удаление пользователя
+        response = client.delete("delete_user/1")
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "User delete successfully!"}

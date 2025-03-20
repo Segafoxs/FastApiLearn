@@ -36,9 +36,11 @@ async def authenticate_user(credentials: HTTPBasicCredentials = Depends(security
     return user
 
 
-@router.get("/login/")
+@router.post("/login/")
 async def login_user(userData: UserData = Depends(authenticate_user)):
-    return {"message": "You have access to the protected resource!", "user_info": userData}
+    return {"message": "You have access to the protected resource!",
+            "id": userData.id,
+            "username": userData.username}
 
 
 @router.post("/register/", status_code=status.HTTP_201_CREATED)
@@ -80,5 +82,8 @@ async def delete_user_in_db(user_id: int, db: Session = Depends(get_db)):
     db.delete(user_db)
     db.commit()
     return {"message": "User delete successfully!"}
+
+
+
 
 
