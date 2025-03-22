@@ -86,6 +86,13 @@ class TestCase():
 
 
     def test_auth(self, client: TestClient):
+        #неверные данные
+        data = {"username": "admin@mail.ru", "password": "a3532dmin"}
+        response = client.post("/login/", auth=(data["username"], data["password"]))
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Not auth"}
+
+
 
         data = {"username": "admin@mail.ru", "password": "admin"}
         response = client.post("/login/", auth=(data["username"], data["password"]))
@@ -114,8 +121,6 @@ class TestCase():
 
         response = client.put("/update/1", json={"username": 224})
         assert response.status_code == 422
-
-
 
 
 

@@ -17,3 +17,4 @@ class Users(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
 
 
+
